@@ -1,0 +1,91 @@
+version: '3.4'
+
+networks:
+  dev:
+    driver: bridge
+
+services:
+  userapi:
+    image: ${DOCKER_REGISTRY-}userapi
+    depends_on:
+      - "postgredb"
+    container_name: userapi
+    ports:
+     - "8080:80" 
+    build:
+      context: .
+      dockerfile: UserAPI/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=User ID=postgres;Password=postgres;Server=postgredb;Port=5432;Database=UsersDb; IntegratedSecurity=true;Pooling=true;
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgredb:
+    image: postgres:latest
+    container_name: postgredb
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=UsersDb
+    ports:
+      - "5432:5432"
+    restart: always
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-d", "UsersDb", "-U", "postgres"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  projectapi:
+    image: ${DOCKER_REGISTRY-}projectapi
+    depends_on:
+      - mongodb
+    container_name: projectapi
+    ports:
+      - "8090:80"
+    build:
+      context: .
+      dockerfile: ProjectAPI/Dockerfile
+    environment:
+      - USER_API_URL=http://projectapi:80
+      - MongoDB__ConnectionString=mongodb://mongodb:27017
+      - MongoDB__Database=ProjectDB
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mongodb:
+    image: mongo
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    restart: always
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.runCommand('ping').ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mongodb-data:
+    driver: local
+
+  postgres-data:
+    driver: local
